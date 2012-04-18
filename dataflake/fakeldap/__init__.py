@@ -372,7 +372,11 @@ def apply_filter(tree_pos, base, fltr):
             elif not q_val in val[q_key]:
                 found = False
             if found:
-                res.append(('%s,%s' % (key, base), val))
+                if base.startswith(key):
+                    dn = base
+                else:
+                    dn = '%s,%s' % (key, base)
+                res.append((dn, val))
     return res
 
 def filter_attrs(entry, attrs):
@@ -441,18 +445,22 @@ class FakeLDAPConnection:
         elems.reverse()
         tree_pos = TREE
         tree_pos_dn = ''
+        q = parse_query(query)
 
         for elem in elems:
             if not tree_pos_dn:
                 tree_pos_dn = elem
             else:
                 tree_pos_dn = '%s,%s' % (elem, tree_pos_dn)
-            if tree_pos.has_key(elem):
+
+            if ( scope == ldap.SCOPE_BASE and 
+                 tree_pos_dn == base and not 
+                 cmp_query(q, ANY, strict=True) ):
+                break
+            elif tree_pos.has_key(elem):
                 tree_pos = tree_pos[elem]
             else:
                 raise ldap.NO_SUCH_OBJECT(elem)
-
-        q = parse_query(query)
 
         if cmp_query(q, ANY, strict=True):
             # Return all objects, no matter what class

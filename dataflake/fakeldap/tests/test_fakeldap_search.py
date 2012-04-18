@@ -56,6 +56,19 @@ class FakeLDAPSearchTests(FakeLDAPTests):
         self.assertEquals(len(dn_values), 1)
         self.assertEquals(dn_values, ['cn=foo,ou=users,dc=localhost'])
 
+    def test_search_specific_scope_base(self):
+        import ldap
+        conn = self._makeOne()
+        user_dn, password = self._addUser('foo')
+
+        res = conn.search_s( user_dn
+                           , scope=ldap.SCOPE_BASE
+                           , query='(&(objectClass=person)(cn=foo))'
+                           )
+        dn_values = [dn for (dn, attr_dict) in res]
+        self.assertEquals(len(dn_values), 1)
+        self.assertEquals(dn_values, ['cn=foo,ou=users,dc=localhost'])
+
     def test_search_full_wildcard(self):
         conn = self._makeOne()
         self._addUser('foo')
