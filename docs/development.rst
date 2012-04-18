@@ -68,10 +68,10 @@ Finally, run the tests using the build-in ``setuptools`` testrunner:
    $ /tmp/virtualpy/bin/python setup.py test
    running test
    ...
-   test_escape_dn (dataflake.fakeldap.tests.test_utils.UtilsTest) ... ok
+   test_search_startswithendswith_wildcard (dataflake.fakeldap.tests.test_fakeldap_search.FakeLDAPSearchTests) ... ok
    
    ----------------------------------------------------------------------
-   Ran 88 tests in 0.058s
+   Ran 56 tests in 0.033
    
    OK
 
@@ -84,10 +84,9 @@ use its testrunner too:
    ...
    $ /tmp/virtualpy/bin/python setup.py nosetests
    running nosetests
-   ......................................................................
-   ...............................
+   ....................................................
    ----------------------------------------------------------------------
-   Ran 101 tests in 0.162s
+   Ran 57 tests in 0.049s
 
    OK
 
@@ -96,10 +95,9 @@ or:
 .. code-block:: sh
 
    $ /tmp/virtualpy/bin/nosetests
-   ......................................................................
-   ...............................
+   .....................................................
    ----------------------------------------------------------------------
-   Ran 101 tests in 0.160s
+   Ran 63 tests in 0.072s
 
    OK
 
@@ -114,17 +112,12 @@ you can see how well the tests cover the code:
        --with-coverage --cover-package=dataflake.fakeldap
    running nosetests
    ...
-
-   Name                                  Stmts   Exec  Cover   Missing
-   -------------------------------------------------------------------
-   dataflake.fakeldap                  1      1   100%   
-   dataflake.fakeldap.connection     246    244    99%   214-215
-   dataflake.fakeldap.interfaces      10     10   100%   
-   dataflake.fakeldap.utils            7      7   100%   
-   -------------------------------------------------------------------
-   TOTAL                                   264    262    99%   
+   .........................................................
+   Name                 Stmts   Miss  Cover   Missing
+   --------------------------------------------------
+   dataflake.fakeldap     397     45    89%   ...
    ----------------------------------------------------------------------
-   Ran 101 tests in 0.226s
+   Ran 57 tests in 0.071s
 
    OK
 
@@ -137,7 +130,7 @@ tests, you can build the docs:
 
 .. code-block:: sh
 
-   $ /tmp/virtualpy/bin/easy_install Sphinx
+   $ /tmp/virtualpy/bin/easy_install Sphinx pkginfo
    ...
    $ cd docs
    $ PATH=/tmp/virtualpy/bin:$PATH make html
@@ -146,24 +139,6 @@ tests, you can build the docs:
    build succeeded.
 
    Build finished. The HTML pages are in _build/html.
-
-You can also test the code snippets in the documentation:
-
-.. code-block:: sh
-
-   $ PATH=/tmp/virtualpy/bin:$PATH make doctest
-   sphinx-build -b doctest -d _build/doctrees   . _build/doctest
-   ...
-   running tests...
-
-   Doctest summary
-   ===============
-       0 tests
-       0 failures in tests
-       0 failures in setup code
-   build succeeded.
-   Testing of doctests in the sources finished, look at the \
-        results in _build/doctest/output.txt.
 
 
 Running the tests using  :mod:`zc.buildout`
@@ -184,16 +159,15 @@ Once you have a buildout, the tests can be run as follows:
 
 .. code-block:: sh
 
-   $ bin/test --all
-   Running tests at all levels
-   Running zope.testing.testrunner.layer.UnitTests tests:
-     Set up zope.testing.testrunner.layer.UnitTests in 0.000 seconds.
+   $ bin/test 
+   Running tests at level 1
+   Running zope.testrunner.layer.UnitTests tests:
+     Set up zope.testrunner.layer.UnitTests in 0.000 seconds.
      Running:
-   .....................................................................
-   .........................
-     Ran 94 tests with 0 failures and 0 errors in 0.042 seconds.
+   ..............................................................
+     Ran 62 tests with 0 failures and 0 errors in 0.043 seconds.
    Tearing down left over layers:
-     Tear down zope.testing.testrunner.layer.UnitTests in 0.000 seconds.
+     Tear down zope.testrunner.layer.UnitTests in 0.000 seconds.
 
 
 Building the documentation using :mod:`zc.buildout`
@@ -207,22 +181,9 @@ its code snippets:
 
     $ bin/docbuilder.sh
     rm -rf _build/*
-    sphinx-build -b doctest -d _build/doctrees   . _build/doctest
+    sphinx-build -b html -d _build/doctrees   . _build/html
     Making output directory...
     Running Sphinx v1.1.3
-    ...
-    running tests...
-
-    Doctest summary
-    ===============
-        0 tests
-        0 failures in tests
-        0 failures in setup code
-    build succeeded.
-    Testing of doctests in the sources finished, look at the  results in \
-         .../docs/_build/doctest/output.txt.
-    .../bin/sphinx-build -b html -d .../docs/_build/doctrees   \
-         .../docs .../docs/_build/html
     ...
     build succeeded.
 
@@ -238,7 +199,7 @@ has a latex2pdf binary installed.
     Making output directory...
     Running Sphinx v1.1.3
     ...
-    Output written on dataflake.fakeldap.pdf (23 pages, 128015 bytes).
+    Output written on dataflake.fakeldap.pdf (15 pages, 96151 bytes).
     Transcript written on dataflake.fakeldap.log.
 
 
