@@ -1,0 +1,8 @@
+Change log
+==========
+
+0.1 (unreleased)
+----------------
+- Initial release. For changes prior to this release please see the 
+  ``dataflake.ldapconnection`` package up to release 1.4.
+
