@@ -18,13 +18,13 @@ import unittest
 class FakeLDAPTests(unittest.TestCase):
 
     def setUp(self):
-        from dataflake.fakeldap import addTreeItems
-        addTreeItems('ou=users,dc=localhost')
-        addTreeItems('ou=groups,dc=localhost')
+        from dataflake.fakeldap import TREE
+        self.db = TREE
+        self.db.addTreeItems('ou=users,dc=localhost')
+        self.db.addTreeItems('ou=groups,dc=localhost')
 
     def tearDown(self):
-        from dataflake.fakeldap import clearTree
-        clearTree()
+        self.db.clear()
 
     def _getTargetClass(self):
         from dataflake.fakeldap import FakeLDAPConnection
@@ -35,7 +35,7 @@ class FakeLDAPTests(unittest.TestCase):
         return conn
 
     def _addUser(self, name, mail=None):
-        from dataflake.fakeldap import hash_pwd
+        from dataflake.fakeldap.utils import hash_pwd
         conn = self._makeOne()
         user_dn = 'cn=%s,ou=users,dc=localhost' % name
         user_pwd = '%s_secret' % name

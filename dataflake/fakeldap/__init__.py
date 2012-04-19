@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 ##############################################################################
 #
 # Copyright (c) 2000-2012 Jens Vagelpohl and Contributors. All Rights Reserved.
@@ -14,381 +13,19 @@
 """ A fake LDAP module for unit tests
 """
 
-import base64
 from copy import deepcopy
-try:
-    from hashlib import sha1 as sha_new
-except ImportError:
-    from sha import new as sha_new
 import ldap
 from ldap.dn import explode_dn
-import re
 
-# From http://www.ietf.org/rfc/rfc2254.txt, Section 4
-#
-# filter     = "(" filtercomp ")"
-# filtercomp = and / or / not / item
-# and        = "&" filterlist
-# or         = "|" filterlist
-# not        = "!" filter
-# filterlist = 1*filter
-# item       = simple / present / substring / extensible
-# simple     = attr filtertype value
-# filtertype = equal / approx / greater / less
-# equal      = "="
-# approx     = "~="
-# greater    = ">="
-# less       = "<="
-# extensible = attr [":dn"] [":" matchingrule] ":=" value
-#              / [":dn"] ":" matchingrule ":=" value
-# present    = attr "=*"
-# substring  = attr "=" [initial] any [final]
-# initial    = value
-# any        = "*" *(value "*")
-# final      = value
-# attr       = AttributeDescription from Section 4.1.5 of [1]
-# matchingrule = MatchingRuleId from Section 4.1.9 of [1]
-# value      = AttributeValue from Section 4.1.6 of [1]
+from dataflake.fakeldap.db import DataStore
+from dataflake.fakeldap.op import Op
+from dataflake.fakeldap.queryfilter import Filter
+from dataflake.fakeldap.queryparser import Parser
+from dataflake.fakeldap.utils import hash_pwd
 
-
-_FLTR = r'\(\w*?=[\*\w\s=,\\]*?\)'
-_OP = '[&\|\!]{1}'
-
-FLTR = r'\((?P<attr>\w*?)(?P<comp>=)(?P<value>[\*\w\s=,\\\'@\-\+_\.øØæÆåÅäÄöÖüÜß]*?)\)'
-FLTR_RE = re.compile(FLTR + '(?P<fltr>.*)')
-
-OP = '\((?P<op>(%s))(?P<fltr>(%s)*)\)' % (_OP, _FLTR)
-FULL = '\((?P<op>(%s))(?P<fltr>.*)\)' % _OP
-
-OP_RE = re.compile(OP)
-FULL_RE = re.compile(FULL)
-
-class Op(object):
-
-    def __init__(self, op):
-        self.op = op
-
-    def __repr__(self):
-        return "Op('%s')" % self.op
-
-class Filter(object):
-    """ A simple representation for search filter elements
-    
-    >>> fltr = Filter('cn', '=', 'joe')
-    >>> repr(fltr)
-    "Filter('cn', '=', 'joe')"
-    >>> fltr == Filter('cn', '=', 'joe')
-    True
-    >>> fltr == Filter('CN', '=', 'joe')
-    True
-    >>> fltr == Filter('cn', '=', 'Joe')
-    False
-    >>> filters = [Filter('CN', '=', 'Zack'), Filter('cn', '=', 'Fred')]
-    >>> filters.sort()
-    >>> filters
-    [Filter('cn', '=', 'Fred'), Filter('CN', '=', 'Zack')]
-    """
-
-    def __init__(self, attr, comp, value):
-        self.attr = attr
-        self.comp = comp
-        self.value = value
-
-    def __repr__(self):
-        return "Filter('%s', '%s', '%s')" % (self.attr, self.comp, self.value)
-
-    def __cmp__(self, other):
-        return cmp((self.attr.lower(), self.comp, self.value),
-                   (other.attr.lower(), other.comp, other.value))
-
-    def __eq__(self, other):
-        v1 = (self.attr.lower(), self.comp, self.value)
-        v2 = (other.attr.lower(), other.comp, other.value)
-        return v1 == v2
-
-def parse_query(query, recurse=False):
-    """
-    >>> parse_query('(&(objectclass=person)(cn=jhunter*))')
-    (Op('&'), (Filter('objectclass', '=', 'person'), Filter('cn', '=', 'jhunter*')))
-
-    >>> parse_query('(&(objectclass=person)(|(cn=Jeff Hunter)(cn=mhunter*)))')
-    (Op('&'), (Filter('objectclass', '=', 'person'), (Op('|'), (Filter('cn', '=', 'Jeff Hunter'), Filter('cn', '=', 'mhunter*')))))
-
-    >>> parse_query('(&(l=USA)(!(sn=patel)))')
-    (Op('&'), (Filter('l', '=', 'USA'), (Op('!'), (Filter('sn', '=', 'patel'),))))
-
-    >>> parse_query('(!(&(drink=beer)(description=good)))')
-    (Op('!'), (Op('&'), (Filter('drink', '=', 'beer'), Filter('description', '=', 'good'))))
-
-    >>> parse_query('(&(objectclass=person)(dn=cn=jhunter,dc=dataflake,dc=org))')
-    (Op('&'), (Filter('objectclass', '=', 'person'), Filter('dn', '=', 'cn=jhunter,dc=dataflake,dc=org')))
-
-    >>> from pprint import pprint
-    >>> q = parse_query('(|(&(objectClass=group)(member=cn=test,ou=people,dc=dataflake,dc=org))'
-    ...                 '(&(objectClass=groupOfNames)(member=cn=test,ou=people,dc=dataflake,dc=org))'
-    ...                 '(&(objectClass=groupOfUniqueNames)(uniqueMember=cn=test,ou=people,dc=dataflake,dc=org))'
-    ...                 '(&(objectClass=accessGroup)(member=cn=test,ou=people,dc=dataflake,dc=org)))')
-
-    >>> pprint(q)
-    (Op('|'),
-     (Op('&'),
-      (Filter('objectClass', '=', 'group'),
-       Filter('member', '=', 'cn=test,ou=people,dc=dataflake,dc=org')),
-      Op('&'),
-      (Filter('objectClass', '=', 'groupOfNames'),
-       Filter('member', '=', 'cn=test,ou=people,dc=dataflake,dc=org')),
-      Op('&'),
-      (Filter('objectClass', '=', 'groupOfUniqueNames'),
-       Filter('uniqueMember', '=', 'cn=test,ou=people,dc=dataflake,dc=org')),
-      Op('&'),
-      (Filter('objectClass', '=', 'accessGroup'),
-       Filter('member', '=', 'cn=test,ou=people,dc=dataflake,dc=org'))))
-    """
-    parts = []
-    for expr in (OP_RE, FULL_RE):
-        # Match outermost operations
-        m = expr.match(query)
-        if m:
-            d = m.groupdict()
-            op = Op(d['op'])
-            sub = parse_query(d['fltr'])
-            if recurse:
-                parts.append((op, sub))
-            else:
-                parts.append(op)
-                parts.append(sub)
-            rest = query[m.end():]
-            if rest:
-                parts.extend(parse_query(rest))
-            return tuple(parts)
-
-    # Match internal filter.
-    m = FLTR_RE.match(query)
-    if m is None:
-        raise ValueError(query)
-    d = m.groupdict()
-    parts.append(Filter(d['attr'], d['comp'], d['value']))
-    if d['fltr']:
-        parts.extend(parse_query(d['fltr'], recurse=True))
-    return tuple(parts)
-
-def flatten_query(query, klass=Filter):
-    """
-    >>> q = parse_query('(&(objectclass=person)(|(cn=Jeff Hunter)(cn=mhunter*)))')
-
-    >>> flatten_query(q, Filter)
-    (Filter('objectclass', '=', 'person'), Filter('cn', '=', 'Jeff Hunter'), Filter('cn', '=', 'mhunter*'))
-
-    >>> flatten_query(q, Op)
-    (Op('&'), Op('|'))
-    """
-    q = [f for f in query if isinstance(f, klass)]
-    for item in query:
-        if isinstance(item, tuple):
-            q.extend(flatten_query(item, klass))
-    return tuple(q)
-
-def explode_query(query):
-    """
-    >>> q = parse_query('(&(objectClass=person)(|(cn=Jeff Hunter)(cn=mhunter*)))')
-    >>> for sub in explode_query(q):
-    ...     print sub
-    (Op('|'), (Filter('cn', '=', 'Jeff Hunter'), Filter('cn', '=', 'mhunter*')))
-    (Op('&'), (Filter('objectClass', '=', 'person'),))
-
-    >>> q = parse_query('(objectClass=*)')
-    >>> for sub in explode_query(q):
-    ...     print sub
-    (Op('&'), (Filter('objectClass', '=', '*'),))
-
-    >>> from pprint import pprint
-    >>> q = parse_query('(|(&(objectClass=group)(member=cn=test,ou=people,dc=dataflake,dc=org))'
-    ...                   '(&(objectClass=groupOfNames)(member=cn=test,ou=people,dc=dataflake,dc=org))'
-    ...                   '(&(objectClass=groupOfUniqueNames)(uniqueMember=cn=test,ou=people,dc=dataflake,dc=org))'
-    ...                   '(&(objectClass=accessGroup)(member=cn=test,ou=people,dc=dataflake,dc=org)))')
-    >>> for sub in explode_query(q):
-    ...     pprint(sub)
-    (Op('&'),
-     (Filter('objectClass', '=', 'group'),
-      Filter('member', '=', 'cn=test,ou=people,dc=dataflake,dc=org')))
-    (Op('&'),
-     (Filter('objectClass', '=', 'groupOfNames'),
-      Filter('member', '=', 'cn=test,ou=people,dc=dataflake,dc=org')))
-    (Op('&'),
-     (Filter('objectClass', '=', 'groupOfUniqueNames'),
-      Filter('uniqueMember', '=', 'cn=test,ou=people,dc=dataflake,dc=org')))
-    (Op('&'),
-     (Filter('objectClass', '=', 'accessGroup'),
-      Filter('member', '=', 'cn=test,ou=people,dc=dataflake,dc=org')))
-    (Op('|'), ())
-    """
-    if isinstance(query, str):
-        query = parse_query(query)
-
-    res = []
-    def dig(sub, res):
-        level = []
-        for item in sub:
-            if isinstance(item, tuple):
-                got = dig(item, res)
-                if got and level and isinstance(level[0], Op):
-                    level.append(got)
-                    res.append(tuple(level))
-                    level = []
-            else:
-                level.append(item)
-        return tuple(level)
-
-    level = dig(query, res)
-    if not res:
-        # A simple filter with no operands
-        return ((Op('&'), level),)
-    if level:
-        # Very likely a single operand around a group of filters.
-        assert len(level) == 1, (len(level), level)
-        res.append((level[0], ()))
-    return tuple(res)
-
-def cmp_query(query, other, strict=False):
-    """
-    >>> print cmp_query('(&(objectclass=person)(cn=jhunter*))', '(objectClass=person)')
-    Filter('objectClass', '=', 'person')
-
-    >>> print cmp_query('(&(objectClass=groupOfUniqueNames)(uniqueMember=sidnei))', '(objectClass=groupOfUniqueNames)')
-    Filter('objectClass', '=', 'groupOfUniqueNames')
-
-    >>> print cmp_query('(&(objectClass=groupOfUniqueNames)(uniqueMember=sidnei))', '(uniqueMember=sidnei)')
-    Filter('uniqueMember', '=', 'sidnei')
-
-    >>> print cmp_query('(&(objectClass=groupOfUniqueNames)(uniqueMember=sidnei))', '(uniqueMember=jens)')
-    None
-    """
-    if isinstance(query, str):
-        query = parse_query(query)
-    if isinstance(other, str):
-        other = parse_query(other)
-
-    q1 = flatten_query(query)
-    q2 = flatten_query(other)
-
-    if strict:
-        return q1 == q2
-
-    for fltr in q2:
-        if fltr in q1:
-            return fltr
-
-def find_query_attr(query, attr):
-    """
-    >>> print find_query_attr('(&(objectclass=person)(cn=jhunter*))', 'objectClass')
-    Filter('objectclass', '=', 'person')
-
-    >>> print find_query_attr('(&(objectClass=groupOfUniqueNames)(uniqueMember=sidnei))', 'uniqueMember')
-    Filter('uniqueMember', '=', 'sidnei')
-
-    >>> print find_query_attr('(&(objectClass=groupOfUniqueNames)(uniqueMember=sidnei))', 'cn')
-    None
-    """
-    if isinstance(query, str):
-        query = parse_query(query)
-
-    q1 = flatten_query(query)
-
-    for fltr in q1:
-        if fltr.attr.lower() == attr.lower():
-            return fltr
-
-TREE = {}
-
-ANY = parse_query('(objectClass=*)')
-GROUP_OF_UNIQUE_NAMES = parse_query('(objectClass=groupOfUniqueNames)')
-
-
-def clearTree():
-    TREE.clear()
-
-def addTreeItems(dn):
-    """ Add structure directly to the tree given a DN 
-
-    returns the last added tree position for convenience
-    """
-    elems = explode_dn(dn)
-    elems.reverse()
-    tree_pos = TREE
-
-    for elem in elems:
-        if not tree_pos.has_key(elem):
-            tree_pos[elem] = {}
-
-        tree_pos = tree_pos[elem]
-
-    return tree_pos
-
-def apply_filter(tree_pos, base, fltr):
-    res = []
-    q_key, q_val = fltr.attr, fltr.value
-    wildcard = False
-    if q_val.startswith('*') or q_val.endswith('*'):
-        if q_val != '*':
-            # Wildcard search
-            if q_val.startswith('*') and q_val.endswith('*'):
-                wildcard = 'both'
-                q_val = q_val[1:-1]
-            elif q_val.startswith('*'):
-                wildcard = 'start'
-                q_val = q_val[1:]
-            elif q_val.endswith('*'):
-                wildcard = 'end'
-                q_val = q_val[:-1]
-    # Need to find out if tree_pos is a leaf record, it needs different handling
-    # Leaf records will appear when doing BASE-scoped searches.
-    if tree_pos.has_key('dn'):
-        key = explode_dn(tree_pos['dn'])[0]
-        to_search = [(key, tree_pos)]
-    else:
-        to_search = tree_pos.items()
-
-    for key, val in to_search:
-        found = True
-        if val.has_key(q_key):
-            if q_val == '*':
-                # Always include if there's a value for it.
-                pass
-            elif wildcard:
-                found = False
-                for x in val[q_key]:
-                    if wildcard == 'start':
-                        if x.endswith(q_val):
-                            found = True
-                            break
-                    elif wildcard == 'end':
-                        if x.startswith(q_val):
-                            found = True
-                            break
-                    else:
-                        if q_val in x:
-                            found = True
-                            break
-            elif not q_val in val[q_key]:
-                found = False
-            if found:
-                if base.startswith(key):
-                    dn = base
-                else:
-                    dn = '%s,%s' % (key, base)
-                res.append((dn, val))
-    return res
-
-def filter_attrs(entry, attrs):
-    if not attrs:
-        return entry
-    return dict((k, v) for k, v in entry.items() if k in attrs)
-
-def hash_pwd(string):
-    if isinstance(string, unicode):
-        string = string.encode('utf-8')
-    sha_digest = sha_new(string).digest()
-    return '{SHA}%s' % base64.encodestring(sha_digest).strip()
+PARSER = Parser()
+ANY = PARSER.parse_query('(objectClass=*)')
+TREE = DataStore()
 
 
 class FakeLDAPConnection:
@@ -404,6 +41,7 @@ class FakeLDAPConnection:
         self.options = {}
         self._last_bind = None
         self.start_tls_called = False
+        self.parser = Parser()
 
     def set_option(self, option, value):
         self.options[option] = value
@@ -419,63 +57,56 @@ class FakeLDAPConnection:
             return 1
 
         if self.hash_password:
-            enc_bindpwd = hash_pwd(bindpwd)
-        else:
-            enc_bindpwd = bindpwd
+            bindpwd = hash_pwd(bindpwd)
 
-        rec = self.search_s(binduid)
-        rec_pwd = ''
-        for key, val_list in rec:
-            if key == 'userPassword':
-                rec_pwd = val_list[0]
-                break
+        rec = self.search_s( binduid
+                           , scope=ldap.SCOPE_BASE
+                           , attrs=('userPassword',)
+                           )
+
+        rec_pwd = rec[0][1].get('userPassword')
 
         if not rec_pwd:
             raise ldap.INVALID_CREDENTIALS
 
-        if enc_bindpwd == rec_pwd:
+        if bindpwd == rec_pwd[0]:
             return 1
         else:
             raise ldap.INVALID_CREDENTIALS
 
+    def _filter_attrs(self, entry, attrs):
+        if not attrs:
+            return entry
+        return dict((k, v) for k, v in entry.items() if k in attrs)
+
     def search_s(self, base, scope=ldap.SCOPE_SUBTREE,
                  query='(objectClass=*)', attrs=()):
 
-        elems = explode_dn(base)
-        elems.reverse()
-        tree_pos = TREE
-        tree_pos_dn = ''
-        q = parse_query(query)
+        parsed_query = self.parser.parse_query(query)
+        tree_pos = TREE.getElementByDN(base)
 
-        for elem in elems:
-            if not tree_pos_dn:
-                tree_pos_dn = elem
-            else:
-                tree_pos_dn = '%s,%s' % (elem, tree_pos_dn)
-
-            if ( scope == ldap.SCOPE_BASE and 
-                 tree_pos_dn == base and not 
-                 cmp_query(q, ANY, strict=True) ):
-                break
-            elif tree_pos.has_key(elem):
-                tree_pos = tree_pos[elem]
-            else:
-                raise ldap.NO_SUCH_OBJECT(elem)
-
-        if cmp_query(q, ANY, strict=True):
+        if self.parser.cmp_query(parsed_query, ANY, strict=True):
             # Return all objects, no matter what class
-            if scope == ldap.SCOPE_BASE and tree_pos_dn == base:
+            if scope == ldap.SCOPE_BASE:
                 # Only if dn matches 'base'
-                return [(base, deepcopy(filter_attrs(tree_pos, attrs)))]
+                return [(base, deepcopy(self._filter_attrs(tree_pos, attrs)))]
             else:
-                return [(k, deepcopy(filter_attrs(v, attrs))) for k, v in tree_pos.items()]
+                return [(k, deepcopy(self._filter_attrs(v, attrs))) 
+                                                for k, v in tree_pos.items()]
+
+        if scope == ldap.SCOPE_BASE:
+            # At this stage tree_pos will be a leaf record. We need to 
+            # "re-wrap" it.
+            rdn = explode_dn(base)[0]
+            tree_pos = {rdn: tree_pos}
 
         by_level = {}
-        for idx, (operation, filters) in enumerate(explode_query(q)):
+        enumerated = enumerate(self.parser.explode_query(parsed_query))
+        for idx, (operation, filters) in enumerated:
             lvl = by_level[idx] = []
             by_filter = {}
             for fltr in filters:
-                sub = apply_filter(tree_pos, base, fltr)
+                sub = fltr(tree_pos, base)
                 by_filter[fltr] = sub
                 # Optimization: If it's an AND query bail out on
                 # the first empty value, but still set the empty
@@ -522,80 +153,63 @@ class FakeLDAPConnection:
                         lvl[:] = new_lvl
         if by_level:
             # Return the last one.
-            return [(k, deepcopy(filter_attrs(v, attrs))) for k, v in by_level[idx]]
+            return [(k, deepcopy(self._filter_attrs(v, attrs))) 
+                                                    for k, v in by_level[idx]]
 
         return []
 
     def add_s(self, dn, attr_list):
         elems = explode_dn(dn)
-        elems.reverse()
-        rdn = elems[-1]
-        base = elems[:-1]
-        tree_pos = TREE
-
-        for elem in base:
-            if tree_pos.has_key(elem):
-                tree_pos = tree_pos[elem]
-            else:
-                raise ldap.NO_SUCH_OBJECT(elem)
+        rdn = elems[0]
+        tree_pos = TREE.getElementByDN(elems[1:])
 
         if tree_pos.has_key(rdn):
             raise ldap.ALREADY_EXISTS(rdn)
 
         # Add rdn to attributes as well.
-        k, v = rdn.split('=')
-        tree_pos[rdn] = {k:[v]}
-        rec = tree_pos[rdn]
+        rdn_key, rdn_value = rdn.split('=')
+        tree_pos[rdn] = {rdn_key: [rdn_value]}
+        record = tree_pos[rdn]
 
-        for key, val in attr_list:
-            rec[key] = val
+        for key, value in attr_list:
+            record[key] = value
 
             # Maintain memberOf
             if self.maintain_memberof:
                 if key == self.member_attr:
-                    for v in val:
-                        self.modify_s(v, [(ldap.MOD_ADD, self.memberof_attr, [dn])])
+                    for v in value:
+                        self.modify_s( v
+                                     , [(ldap.MOD_ADD, self.memberof_attr, [dn])]
+                                     )
 
     def delete_s(self, dn):
         elems = explode_dn(dn)
-        elems.reverse()
-        rdn = elems[-1]
-        base = elems[:-1]
-        tree_pos = TREE
-
-        for elem in base:
-            if tree_pos.has_key(elem):
-                tree_pos = tree_pos[elem]
-            else:
-                raise ldap.NO_SUCH_OBJECT(elem)
+        rdn = elems[0]
+        tree_pos = TREE.getElementByDN(elems[1:])
 
         if not tree_pos.has_key(rdn):
             raise ldap.NO_SUCH_OBJECT(rdn)
 
         # Maintain memberOf
         if self.maintain_memberof:
-            rec = tree_pos[rdn]
-            if self.member_attr in rec:
-                for v in rec[self.member_attr]:
-                    self.modify_s(v, [(ldap.MOD_DELETE, self.memberof_attr, [dn])])
-            if self.memberof_attr in rec:
-                for v in rec[self.memberof_attr]:
-                    self.modify_s(v, [(ldap.MOD_DELETE, self.member_attr, [dn])])
+            record = tree_pos[rdn]
+            if self.member_attr in record:
+                for value in record[self.member_attr]:
+                    self.modify_s( value
+                                 , [(ldap.MOD_DELETE, self.memberof_attr, [dn])]
+                                 )
+            if self.memberof_attr in record:
+                for value in record[self.memberof_attr]:
+                    self.modify_s( value
+                                 , [(ldap.MOD_DELETE, self.member_attr, [dn])]
+                                 )
 
         del tree_pos[rdn]
 
     def modify_s(self, dn, mod_list):
         elems = explode_dn(dn)
-        elems.reverse()
-        rdn = elems[-1]
-        base = elems[:-1]
-        tree_pos = TREE
-
-        for elem in base:
-            if tree_pos.has_key(elem):
-                tree_pos = tree_pos[elem]
-            else:
-                raise ldap.NO_SUCH_OBJECT(elem)
+        rdn = elems[0]
+        tree_pos = TREE.getElementByDN(elems[1:])
 
         if not tree_pos.has_key(rdn):
             raise ldap.NO_SUCH_OBJECT(rdn)
@@ -636,16 +250,8 @@ class FakeLDAPConnection:
 
     def modrdn_s(self, dn, new_rdn, *ign):
         elems = explode_dn(dn)
-        elems.reverse()
-        rdn = elems[-1]
-        base = elems[:-1]
-        tree_pos = TREE
-
-        for elem in base:
-            if tree_pos.has_key(elem):
-                tree_pos = tree_pos[elem]
-            else:
-                raise ldap.NO_SUCH_OBJECT(elem)
+        rdn = elems[0]
+        tree_pos = TREE.getElementByDN(elems[1:])
 
         if not tree_pos.has_key(rdn):
             raise ldap.NO_SUCH_OBJECT(rdn)
@@ -707,3 +313,4 @@ class FixedResultFakeLDAPConnection(FakeLDAPConnection):
 class ldapobject:
     class ReconnectLDAPObject(FakeLDAPConnection):
         pass
+
