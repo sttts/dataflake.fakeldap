@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 ##############################################################################
 #
 # Copyright (c) 2008-2012 Jens Vagelpohl and Contributors. All Rights Reserved.
@@ -12,7 +11,6 @@
 #
 ##############################################################################
 
-import doctest
 import unittest
 
 from dataflake.fakeldap.tests.base import FakeLDAPTests
@@ -51,28 +49,4 @@ class FakeLDAPBasicTests(FakeLDAPTests):
                            , [('partial result', {'dn': 'partial result'})]
                            )
                          )
-
-
-class HashPwdTests(unittest.TestCase):
-
-    def test_hash_pwd(self):
-        from dataflake.fakeldap import hash_pwd
-        pwd = hash_pwd('secret')
-        self.assertTrue(isinstance(pwd, str))
-        self.assertTrue(pwd.startswith('{SHA}'))
-
-    def test_hash_unicode_pwd(self):
-        from dataflake.fakeldap import hash_pwd
-        pwd = hash_pwd(u'bjørn')
-        self.assertTrue(isinstance(pwd, str))
-        self.assertTrue(pwd.startswith('{SHA}'))
-
-
-def test_suite():
-    import dataflake.fakeldap
-    suite = unittest.TestSuite()
-    suite.addTest(unittest.makeSuite(FakeLDAPBasicTests))
-    suite.addTest(unittest.makeSuite(HashPwdTests))
-    suite.addTest(doctest.DocTestSuite(dataflake.fakeldap))
-    return suite
 

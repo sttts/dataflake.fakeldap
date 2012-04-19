@@ -63,7 +63,30 @@ class FakeLDAPBindTests(FakeLDAPTests):
                          , 'ANY PASSWORD'
                          )
 
+    def test_bind_no_such_user(self):
+        import ldap
+        conn = self._makeOne()
+
+        # Users with empty passwords cannot log in
+        user2 = [('cn', ['user2'])]
+        conn.add_s('cn=user2,ou=users,dc=localhost', user2)
+        self.assertRaises( ldap.NO_SUCH_OBJECT
+                         , conn.simple_bind_s
+                         , 'cn=user1,ou=users,dc=localhost'
+                         , 'ANY PASSWORD'
+                         )
+
     def test_unbind_clears_last_bind(self):
+        conn = self._makeOne()
+        user_dn, password = self._addUser('foo')
+
+        self.failUnless(conn.simple_bind_s(user_dn, password))
+        self.assertEquals(conn._last_bind[1], (user_dn, password))
+
+        conn.unbind()
+        self.assertEquals(conn._last_bind, None)
+
+    def test_unbind_s_clears_last_bind(self):
         conn = self._makeOne()
         user_dn, password = self._addUser('foo')
 
@@ -81,7 +104,7 @@ class HashedPasswordTests(FakeLDAPTests):
         self.assertEquals(conn.hash_password, True)
 
     def test_password_is_hashed(self):
-        from dataflake.fakeldap import hash_pwd
+        from dataflake.fakeldap.utils import hash_pwd
         conn = self._makeOne()
         self._addUser('foo')
 

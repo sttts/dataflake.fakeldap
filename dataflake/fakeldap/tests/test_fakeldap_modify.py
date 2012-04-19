@@ -60,6 +60,38 @@ class FakeLDAPModifyTests(FakeLDAPTests):
                          , ['foo@email.com']
                          )
 
+    def test_modify_replace(self):
+        import ldap
+
+        conn = self._makeOne()
+        self._addUser('foo', mail='foo@bar.com')
+
+        foo = conn.search_s('ou=users,dc=localhost', query='(cn=foo)')
+        old_values = foo[0][1]
+        self.assertEqual(old_values['mail'], ['foo@bar.com'])
+
+        modlist = [(ldap.MOD_REPLACE, 'mail', ['foo@email.com'])]
+        conn.modify_s('cn=foo,ou=users,dc=localhost', modlist)
+        foo = conn.search_s('ou=users,dc=localhost', query='(cn=foo)')
+        self.assertEquals(foo[0][1]['mail'], ['foo@email.com'])
+
+    def test_modify_add(self):
+        import ldap
+
+        conn = self._makeOne()
+        self._addUser('foo', mail='foo@bar.com')
+
+        foo = conn.search_s('ou=users,dc=localhost', query='(cn=foo)')
+        old_values = foo[0][1]
+        self.assertEqual(old_values['mail'], ['foo@bar.com'])
+
+        modlist = [(ldap.MOD_ADD, 'mail', ['foo@email.com'])]
+        conn.modify_s('cn=foo,ou=users,dc=localhost', modlist)
+        foo = conn.search_s('ou=users,dc=localhost', query='(cn=foo)')
+        self.assertEquals( set(foo[0][1]['mail'])
+                         , set(['foo@email.com', 'foo@bar.com'])
+                         )
+
     def test_modrdn_wrongbase(self):
         import ldap
         conn = self._makeOne()
