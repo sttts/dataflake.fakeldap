@@ -1,6 +1,10 @@
 Change log
 ==========
 
+1.1 (unreleased)
+----------------
+
+
 1.0 (2012-04-20)
 ----------------
 - refactor the monolithic original module into manageable and 
