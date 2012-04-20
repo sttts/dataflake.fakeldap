@@ -11,7 +11,6 @@
 #
 ##############################################################################
 
-import doctest
 import unittest
 
 
@@ -103,10 +102,85 @@ class ParserTests(unittest.TestCase):
                         , "(Op('&'), Op('|'))"
                         )
 
-def test_suite():
-    from dataflake.fakeldap import queryparser
-    suite = unittest.TestSuite()
-    suite.addTest(unittest.makeSuite(ParserTests))
-    suite.addTest(doctest.DocTestSuite(queryparser))
-    return suite
+    def test_explode(self):
+        parser = self._makeOne()
+        query = '(&(objectclass=person)(|(cn=Jeff Hunter)(cn=mhunter*)))'
+        parsed = parser.parse_query(query)
+
+        exploded = parser.explode_query(parsed)
+        self.assertEqual(len(exploded), 2)
+        self.assertEqual( repr(exploded[0])
+                        , "(Op('|'), (Filter('cn', '=', 'Jeff Hunter'), Filter('cn', '=', 'mhunter*')))"
+                        )
+        self.assertEqual( repr(exploded[1])
+                        , "(Op('&'), (Filter('objectclass', '=', 'person'),))"
+                        )
+
+    def test_explode_simple(self):
+        parser = self._makeOne()
+        query = '(objectClass=*)'
+        parsed = parser.parse_query(query)
+
+        exploded = parser.explode_query(parsed)
+        self.assertEqual(len(exploded), 1)
+        self.assertEqual( repr(exploded[0])
+                        , "(Op('&'), (Filter('objectClass', '=', '*'),))"
+                        )
+
+    def test_explode_convoluted(self):
+        parser = self._makeOne()
+        query = '(|(&(objectClass=group)(member=cn=test,ou=people,dc=dataflake,dc=org))(&(objectClass=groupOfNames)(member=cn=test,ou=people,dc=dataflake,dc=org))(&(objectClass=groupOfUniqueNames)(uniqueMember=cn=test,ou=people,dc=dataflake,dc=org))(&(objectClass=accessGroup)(member=cn=test,ou=people,dc=dataflake,dc=org)))'
+        parsed = parser.parse_query(query)
+
+        exploded = parser.explode_query(parsed)
+        self.assertEqual(len(exploded), 5)
+        self.assertEqual( repr(exploded[0])
+                        , "(Op('&'), (Filter('objectClass', '=', 'group'), Filter('member', '=', 'cn=test,ou=people,dc=dataflake,dc=org')))"
+                        )
+        self.assertEqual( repr(exploded[1])
+                        , "(Op('&'), (Filter('objectClass', '=', 'groupOfNames'), Filter('member', '=', 'cn=test,ou=people,dc=dataflake,dc=org')))"
+                        )
+        self.assertEqual( repr(exploded[2])
+                        , "(Op('&'), (Filter('objectClass', '=', 'groupOfUniqueNames'), Filter('uniqueMember', '=', 'cn=test,ou=people,dc=dataflake,dc=org')))"
+                        )
+        self.assertEqual( repr(exploded[3])
+                        , "(Op('&'), (Filter('objectClass', '=', 'accessGroup'), Filter('member', '=', 'cn=test,ou=people,dc=dataflake,dc=org')))"
+                        )
+        self.assertEqual(repr(exploded[4]), "(Op('|'), ())")
+
+    def test_cmp(self):
+        parser = self._makeOne()
+        query_1 = '(&(objectclass=person)(cn=jhunter*))'
+        query_2 = '(objectClass=person)'
+        parsed_1 = parser.parse_query(query_1)
+        parsed_2 = parser.parse_query(query_2)
+
+        self.assertEqual( repr(parser.cmp_query(parsed_1, parsed_2))
+                        , "Filter('objectClass', '=', 'person')"
+                        )
+
+        query_1 = '(&(objectClass=groupOfUniqueNames)(uniqueMember=sidnei))'
+        query_2 = '(objectClass=groupOfUniqueNames)'
+        parsed_1 = parser.parse_query(query_1)
+        parsed_2 = parser.parse_query(query_2)
+
+        self.assertEqual( repr(parser.cmp_query(parsed_1, parsed_2))
+                        , "Filter('objectClass', '=', 'groupOfUniqueNames')"
+                        )
+
+        query_1 = '(&(objectClass=groupOfUniqueNames)(uniqueMember=sidnei))'
+        query_2 = '(uniqueMember=sidnei)'
+        parsed_1 = parser.parse_query(query_1)
+        parsed_2 = parser.parse_query(query_2)
+
+        self.assertEqual( repr(parser.cmp_query(parsed_1, parsed_2))
+                        , "Filter('uniqueMember', '=', 'sidnei')"
+                        )
+
+        query_1 = '(&(objectClass=groupOfUniqueNames)(uniqueMember=sidnei))'
+        query_2 = '(uniqueMember=jens)'
+        parsed_1 = parser.parse_query(query_1)
+        parsed_2 = parser.parse_query(query_2)
+
+        self.assertEqual(parser.cmp_query(parsed_1, parsed_2), None)
 

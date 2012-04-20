@@ -97,39 +97,7 @@ class Parser(object):
         return tuple(q)
     
     def explode_query(self, query):
-        """
-        >>> p = Parser()
-        >>> q = p.parse_query('(&(objectClass=person)(|(cn=Jeff Hunter)(cn=mhunter*)))')
-        >>> for sub in p.explode_query(q):
-        ...     print sub
-        (Op('|'), (Filter('cn', '=', 'Jeff Hunter'), Filter('cn', '=', 'mhunter*')))
-        (Op('&'), (Filter('objectClass', '=', 'person'),))
-    
-        >>> q = p.parse_query('(objectClass=*)')
-        >>> for sub in p.explode_query(q):
-        ...     print sub
-        (Op('&'), (Filter('objectClass', '=', '*'),))
-    
-        >>> from pprint import pprint
-        >>> q = p.parse_query('(|(&(objectClass=group)(member=cn=test,ou=people,dc=dataflake,dc=org))'
-        ...                   '(&(objectClass=groupOfNames)(member=cn=test,ou=people,dc=dataflake,dc=org))'
-        ...                   '(&(objectClass=groupOfUniqueNames)(uniqueMember=cn=test,ou=people,dc=dataflake,dc=org))'
-        ...                   '(&(objectClass=accessGroup)(member=cn=test,ou=people,dc=dataflake,dc=org)))')
-        >>> for sub in p.explode_query(q):
-        ...     pprint(sub)
-        (Op('&'),
-         (Filter('objectClass', '=', 'group'),
-          Filter('member', '=', 'cn=test,ou=people,dc=dataflake,dc=org')))
-        (Op('&'),
-         (Filter('objectClass', '=', 'groupOfNames'),
-          Filter('member', '=', 'cn=test,ou=people,dc=dataflake,dc=org')))
-        (Op('&'),
-         (Filter('objectClass', '=', 'groupOfUniqueNames'),
-          Filter('uniqueMember', '=', 'cn=test,ou=people,dc=dataflake,dc=org')))
-        (Op('&'),
-         (Filter('objectClass', '=', 'accessGroup'),
-          Filter('member', '=', 'cn=test,ou=people,dc=dataflake,dc=org')))
-        (Op('|'), ())
+        """ Separate a parsed query into operations
         """
         res = []
         def dig(sub, res):
@@ -156,25 +124,8 @@ class Parser(object):
         return tuple(res)
     
     def cmp_query(self, query, other, strict=False):
+        """ Compare parsed queries and return common query elements
         """
-        >>> p = Parser()
-        >>> print p.cmp_query('(&(objectclass=person)(cn=jhunter*))', '(objectClass=person)')
-        Filter('objectClass', '=', 'person')
-    
-        >>> print p.cmp_query('(&(objectClass=groupOfUniqueNames)(uniqueMember=sidnei))', '(objectClass=groupOfUniqueNames)')
-        Filter('objectClass', '=', 'groupOfUniqueNames')
-    
-        >>> print p.cmp_query('(&(objectClass=groupOfUniqueNames)(uniqueMember=sidnei))', '(uniqueMember=sidnei)')
-        Filter('uniqueMember', '=', 'sidnei')
-    
-        >>> print p.cmp_query('(&(objectClass=groupOfUniqueNames)(uniqueMember=sidnei))', '(uniqueMember=jens)')
-        None
-        """
-        if isinstance(query, str):
-            query = self.parse_query(query)
-        if isinstance(other, str):
-            other = self.parse_query(other)
-    
         q1 = self.flatten_query(query)
         q2 = self.flatten_query(other)
     
@@ -183,26 +134,5 @@ class Parser(object):
     
         for fltr in q2:
             if fltr in q1:
-                return fltr
-    
-    def find_query_attr(self, query, attr):
-        """
-        >>> p = Parser()
-        >>> print p.find_query_attr('(&(objectclass=person)(cn=jhunter*))', 'objectClass')
-        Filter('objectclass', '=', 'person')
-    
-        >>> print p.find_query_attr('(&(objectClass=groupOfUniqueNames)(uniqueMember=sidnei))', 'uniqueMember')
-        Filter('uniqueMember', '=', 'sidnei')
-    
-        >>> print p.find_query_attr('(&(objectClass=groupOfUniqueNames)(uniqueMember=sidnei))', 'cn')
-        None
-        """
-        if isinstance(query, str):
-            query = self.parse_query(query)
-    
-        q1 = self.flatten_query(query)
-    
-        for fltr in q1:
-            if fltr.attr.lower() == attr.lower():
                 return fltr
 
