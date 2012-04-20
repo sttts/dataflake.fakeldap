@@ -1,9 +1,7 @@
 Change log
 ==========
 
-TODO: convert remaining doctests
-
-1.0 (unreleased)
+1.0 (2012-04-20)
 ----------------
 - refactor the monolithic original module into manageable and 
   testable submodules
@@ -16,3 +14,14 @@ TODO: convert remaining doctests
 - fix problem with BASE scoped-searches that specified additional 
   filters
 - add coverage testing to tox configuration
+- Extended ``dataflake.fakeldap.RaisingFakeLDAPConnection`` to accept 
+  a list of exceptions to raise. On each call to the method that is set
+  to raise the exception, the first item in the exception list
+  is removed and raised. This allows testing code areas nested in
+  more than one ``try/except`` clause.
+
+
+Earlier changes
+---------------
+For earlier changes, please see the change log in the 
+``dataflake.ldapconnection`` package prior to version 1.4.
