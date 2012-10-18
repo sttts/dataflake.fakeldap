@@ -3,6 +3,10 @@ Change log
 
 1.1 (unreleased)
 ----------------
+- the Filter object will now clean up filter values during creation
+  by stripping leading and trailing whitespace. This corresponds to 
+  normal LDAP servers' behavior, such as OpenLDAP, where values match 
+  regardless of leading or trailing spaces in the query's value.
 
 
 1.0 (2012-04-20)

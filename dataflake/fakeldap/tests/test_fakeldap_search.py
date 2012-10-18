@@ -28,6 +28,39 @@ class FakeLDAPSearchTests(FakeLDAPTests):
         self.assertEquals(len(dn_values), 1)
         self.assertEquals(dn_values, ['cn=foo,ou=users,dc=localhost'])
 
+    def test_search_specific_leadingspace(self):
+        conn = self._makeOne()
+        self._addUser('foo')
+        self._addUser('footwo')
+        self._addUser('thirdfoo')
+
+        res = conn.search_s('ou=users,dc=localhost', query='(cn= foo)')
+        dn_values = [dn for (dn, attr_dict) in res]
+        self.assertEquals(len(dn_values), 1)
+        self.assertEquals(dn_values, ['cn=foo,ou=users,dc=localhost'])
+
+    def test_search_specific_trailingspace(self):
+        conn = self._makeOne()
+        self._addUser('foo')
+        self._addUser('footwo')
+        self._addUser('thirdfoo')
+
+        res = conn.search_s('ou=users,dc=localhost', query='(cn=foo )')
+        dn_values = [dn for (dn, attr_dict) in res]
+        self.assertEquals(len(dn_values), 1)
+        self.assertEquals(dn_values, ['cn=foo,ou=users,dc=localhost'])
+
+    def test_search_specific_leadingtrailingspace(self):
+        conn = self._makeOne()
+        self._addUser('foo')
+        self._addUser('footwo')
+        self._addUser('thirdfoo')
+
+        res = conn.search_s('ou=users,dc=localhost', query='(cn= foo )')
+        dn_values = [dn for (dn, attr_dict) in res]
+        self.assertEquals(len(dn_values), 1)
+        self.assertEquals(dn_values, ['cn=foo,ou=users,dc=localhost'])
+
     def test_search_nonspecific(self):
         conn = self._makeOne()
         self._addUser('foo')

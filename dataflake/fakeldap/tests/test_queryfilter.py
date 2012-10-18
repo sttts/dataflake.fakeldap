@@ -37,8 +37,19 @@ class FilterTests(unittest.TestCase):
         compare_2 = self._makeOne('CN', '=', 'joe')
         self.assertTrue(fltr == compare_2)
 
-        compare_3 = self._makeOne('cn', '=', 'Joe')
-        self.assertFalse(fltr == compare_3)
+        # Leading or trailing spaces for the value are stripped
+        # by real LDAP servers
+        compare_3 = self._makeOne('cn', '=', ' joe')
+        self.assertTrue(fltr == compare_3)
+
+        compare_4 = self._makeOne('cn', '=', 'joe ')
+        self.assertTrue(fltr == compare_4)
+
+        compare_5 = self._makeOne('cn', '=', ' joe ')
+        self.assertTrue(fltr == compare_5)
+
+        compare_6 = self._makeOne('cn', '=', 'Joe')
+        self.assertFalse(fltr == compare_6)
 
     def test_sorting(self):
         fltr_1 = self._makeOne('CN', '=', 'Zack')

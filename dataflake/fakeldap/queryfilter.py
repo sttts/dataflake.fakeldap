@@ -21,7 +21,7 @@ class Filter(object):
     def __init__(self, attr, comp, value):
         self.attr = attr
         self.comp = comp
-        self.value = value
+        self.value = value.strip()
 
     def __repr__(self):
         return "Filter('%s', '%s', '%s')" % (self.attr, self.comp, self.value)
