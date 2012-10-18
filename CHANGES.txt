@@ -1,6 +1,10 @@
 Change log
 ==========
 
+1.2 (unreleased)
+----------------
+
+
 1.1 (2012-10-18)
 ----------------
 - the Filter object will now clean up filter values during creation
