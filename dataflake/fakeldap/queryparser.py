@@ -81,7 +81,10 @@ class Parser(object):
                 return tuple(parts)
     
         # Match internal filter.
-        d = FLTR_RE.match(query).groupdict()
+        m = FLTR_RE.match(query)
+        if m is None:
+            raise ValueError(query)
+        d = m.groupdict()
         parts.append(Filter(d['attr'], d['comp'], d['value']))
         if d['fltr']:
             parts.extend(self.parse_query(d['fltr'], recurse=True))
