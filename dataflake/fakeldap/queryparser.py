@@ -44,10 +44,10 @@ from dataflake.fakeldap.queryfilter import Filter
 # value      = AttributeValue from Section 4.1.6 of [1]
 
 
-_FLTR = r'\(\w*?=[\*\w\s=,\\]*?\)'
+_FLTR = r'\(\w*?[<>]?=[\*\w\s=,\\]*?\)'
 _OP = '[&\|\!]{1}'
 
-FLTR = r'\((?P<attr>\w*?)(?P<comp>=)(?P<value>[\*\w\s=,\\\'@\-\+_\.øØæÆåÅäÄöÖüÜß]*?)\)'
+FLTR = r'\((?P<attr>\w*?)(?P<comp>[><]?=)(?P<value>[\*\w\s=,\\\'@\-\+_\.øØæÆåÅäÄöÖüÜß]*?)\)'
 FLTR_RE = re.compile(FLTR + '(?P<fltr>.*)')
 
 FULL = '\((?P<op>(%s))(?P<fltr>.*)\)' % _OP
